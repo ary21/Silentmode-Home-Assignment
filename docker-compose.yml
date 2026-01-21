@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: silentmode-minio
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console UI
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - silentmode
+
+  # Redis - Message broker
+  redis:
+    image: redis:7-alpine
+    container_name: silentmode-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - silentmode
+
+  # Server - Cloud controller
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: silentmode-server
+    ports:
+      - "8080:8080"
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: uploads
+      REDIS_URL: redis://redis:6379
+      SERVER_PORT: 8080
+      SERVER_API_KEY: ${SERVER_API_KEY:-dev-api-key-change-in-production}
+      PRESIGNED_EXPIRES_SEC: 900
+      NODE_ENV: development
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - silentmode
+
+  # Client 1 - On-premise agent
+  client-1:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: silentmode-client-1
+    environment:
+      REDIS_URL: redis://redis:6379
+      CLIENT_ID: client-1
+      FILE_PATH: /root/file_to_download.txt
+      NODE_ENV: development
+    depends_on:
+      - redis
+      - server
+    volumes:
+      - client1_data:/root
+    networks:
+      - silentmode
+
+  # Client 2 - Second on-premise agent (for multi-client testing)
+  client-2:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: silentmode-client-2
+    environment:
+      REDIS_URL: redis://redis:6379
+      CLIENT_ID: client-2
+      FILE_PATH: /root/file_to_download.txt
+      NODE_ENV: development
+    depends_on:
+      - redis
+      - server
+    volumes:
+      - client2_data:/root
+    networks:
+      - silentmode
+
+networks:
+  silentmode:
+    driver: bridge
+
+volumes:
+  minio_data:
+  client1_data:
+  client2_data:
