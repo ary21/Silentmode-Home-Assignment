@@ -59,7 +59,8 @@ graph TB
 ### 1. Clone and Setup
 
 ```bash
-cd /Users/ekonurarifin/Desktop/silentmode
+git clone git@github.com:ary21/Silentmode-Home-Assignment.git
+cd Silentmode-Home-Assignment
 cp .env.example .env
 ```
 
