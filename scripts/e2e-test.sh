@@ -49,7 +49,7 @@ info "Triggering download for $CLIENT_ID..."
 RESPONSE=$(curl -s -X POST "$SERVER_URL/download/$CLIENT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"reason":"e2e-test"}')
+  -d '{"reason":"e2e-test", "originalFilename":"e2e_test_file.bin"}')
 
 if [ $? -ne 0 ]; then
   error "Failed to trigger download"

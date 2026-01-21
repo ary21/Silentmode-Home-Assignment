@@ -1,7 +1,7 @@
 import fs from "fs";
+import crypto from "crypto";
 import axios from "axios";
 import brokerService from "./broker.service";
-import { calculateSHA256 } from "../utils/checksum";
 import logger from "../utils/logger";
 
 interface UploadCommand {
@@ -137,16 +137,22 @@ class UploaderService {
     const stats = fs.statSync(filePath);
     const size = stats.size;
 
-    // Calculate checksum
-    logger.debug("Calculating SHA256 checksum...");
-    const sha256 = await calculateSHA256(filePath);
-    logger.debug(`Checksum calculated: ${sha256}`);
+    // Create hash instance
+    const hash = crypto.createHash("sha256");
 
     // Create read stream
     const fileStream = fs.createReadStream(filePath);
 
+    // Update hash as data flows
+    fileStream.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
     // Upload with streaming
-    logger.debug(`Uploading file (${size} bytes)...`);
+    logger.debug(
+      `Uploading file (${size} bytes) with streaming hash calculation...`,
+    );
+
     await axios.put(presignedUrl, fileStream, {
       headers: {
         "Content-Type": "application/octet-stream",
@@ -156,7 +162,9 @@ class UploaderService {
       maxContentLength: Infinity,
     });
 
-    logger.debug("Upload complete");
+    const sha256 = hash.digest("hex");
+    logger.debug(`Upload complete. SHA256: ${sha256}`);
+
     return { size, sha256 };
   }
 

@@ -2,6 +2,11 @@
 
 A distributed system for orchestrating file downloads from on-premise clients behind NAT using command queues and presigned URLs. The system enables cloud servers to trigger file uploads from clients that cannot accept inbound connections, using Redis for messaging and MinIO/S3 for object storage.
 
+Note: This project is a Proof of Concept (PoC) designed for assessment purposes and is not intended for production use. A production-grade implementation would require stack adjustments, such as deploying on physical client hardware and utilizing managed object storage, e.g :
+
+- AWS S3 or Google Cloud Storage for Object storage.
+- broker with MQTT (broker: EMQX, Mosquitto, HiveMQ) or RabbitMQ
+
 ## Architecture Overview
 
 ```mermaid

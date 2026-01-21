@@ -7,6 +7,7 @@ import logger from "../utils/logger";
 const triggerDownloadSchema = Joi.object({
   reason: Joi.string().optional(),
   requestedBy: Joi.string().email().optional(),
+  originalFilename: Joi.string().max(255).optional(), // New optional field
 });
 
 const clientIdSchema = Joi.string()
@@ -24,12 +25,10 @@ export async function triggerDownload(
     // Validate clientId
     const { error: clientIdError } = clientIdSchema.validate(clientId);
     if (clientIdError) {
-      res
-        .status(400)
-        .json({
-          error: "Invalid clientId format",
-          details: clientIdError.message,
-        });
+      res.status(400).json({
+        error: "Invalid clientId format",
+        details: clientIdError.message,
+      });
       return;
     }
 
@@ -47,7 +46,13 @@ export async function triggerDownload(
     const meta = value.requestedBy
       ? { requestedBy: value.requestedBy }
       : undefined;
-    const record = await downloadService.triggerDownload(clientId, meta);
+
+    // Pass originalFilename to service
+    const record = await downloadService.triggerDownload(
+      clientId,
+      value.originalFilename,
+      meta,
+    );
 
     res.status(200).json({
       ok: true,
@@ -77,7 +82,8 @@ export async function getDownloadStatus(
       return;
     }
 
-    const record = downloadService.getDownloadStatus(downloadId);
+    // Await the async service call
+    const record = await downloadService.getDownloadStatus(downloadId);
 
     if (!record) {
       res.status(404).json({ error: "Download not found" });
@@ -95,7 +101,8 @@ export async function getDownloadStatus(
 
 export async function listClients(req: Request, res: Response): Promise<void> {
   try {
-    const clientIds = downloadService.getClientIds();
+    // Current implementation of getClientIds is async stub
+    const clientIds = await downloadService.getClientIds();
     res.status(200).json({ clients: clientIds });
   } catch (error) {
     logger.error("Error in listClients controller:", error);

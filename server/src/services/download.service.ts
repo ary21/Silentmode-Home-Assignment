@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
 import storageService from "./storage.service";
 import brokerService from "./broker.service";
+import dbService from "./db.service";
 import logger from "../utils/logger";
+import { sanitizeFilename } from "../utils/sanitizer";
 import {
   DownloadRecord,
   UploadCommand,
@@ -9,7 +11,6 @@ import {
 } from "../models/download.model";
 
 class DownloadService {
-  private downloads: Map<string, DownloadRecord> = new Map();
   private presignedExpiresSeconds: number;
 
   constructor() {
@@ -21,11 +22,15 @@ class DownloadService {
 
   async triggerDownload(
     clientId: string,
+    originalFilename?: string,
     meta?: { requestedBy?: string },
   ): Promise<DownloadRecord> {
     try {
       const downloadId = uuidv4();
-      const objectKey = `${clientId}/${downloadId}.bin`;
+      const sanitizedName = sanitizeFilename(originalFilename);
+      // New object key format: clientId/downloadId-sanitizedFilename
+      const objectKey = `${clientId}/${downloadId}-${sanitizedName}`;
+
       const now = new Date().toISOString();
       const expiresAt = new Date(
         Date.now() + this.presignedExpiresSeconds * 1000,
@@ -37,7 +42,16 @@ class DownloadService {
         this.presignedExpiresSeconds,
       );
 
-      // Create download record
+      // Create download record in DB
+      await dbService.createDownload({
+        download_id: downloadId,
+        client_id: clientId,
+        object_key: objectKey,
+        original_filename: originalFilename || sanitizedName,
+        status: "pending",
+        presigned_expires_at: expiresAt,
+      });
+
       const record: DownloadRecord = {
         downloadId,
         clientId,
@@ -49,8 +63,6 @@ class DownloadService {
         updatedAt: now,
         meta,
       };
-
-      this.downloads.set(downloadId, record);
 
       // Publish command to client
       const command: UploadCommand = {
@@ -67,6 +79,7 @@ class DownloadService {
       logger.info(`Triggered download for client ${clientId}`, {
         downloadId,
         objectKey,
+        originalFilename,
       });
 
       return record;
@@ -78,48 +91,44 @@ class DownloadService {
 
   async handleUploadComplete(event: UploadEvent): Promise<void> {
     const { downloadId } = event;
-    const record = this.downloads.get(downloadId);
-
-    if (!record) {
-      logger.warn(`Received event for unknown downloadId: ${downloadId}`);
-      return;
-    }
 
     try {
+      const record = await dbService.getDownload(downloadId);
+      if (!record) {
+        logger.warn(`Received event for unknown downloadId: ${downloadId}`);
+        return;
+      }
+
       if (event.event === "upload_complete") {
-        // Update record with upload info
-        record.status = "uploaded";
-        record.size = event.size;
-        record.sha256 = event.sha256;
-        record.updatedAt = new Date().toISOString();
+        await dbService.updateDownloadStatus(downloadId, "uploaded", {
+          size: event.size,
+          sha256: event.sha256,
+          content_type: "application/octet-stream",
+        });
 
         logger.info(`Upload complete for ${downloadId}`, {
           size: event.size,
           sha256: event.sha256,
         });
 
-        // Verify object exists in storage
         const exists = await storageService.verifyObjectExists(
-          record.objectKey,
+          record.object_key,
         );
 
         if (!exists) {
-          record.status = "failed";
-          record.error = "Object not found in storage after upload";
+          await dbService.updateDownloadStatus(downloadId, "failed");
           logger.error(
             `Verification failed: object not found for ${downloadId}`,
           );
           return;
         }
 
-        // Get metadata and verify size
         const metadata = await storageService.getObjectMetadata(
-          record.objectKey,
+          record.object_key,
         );
 
         if (!metadata) {
-          record.status = "failed";
-          record.error = "Could not retrieve object metadata";
+          await dbService.updateDownloadStatus(downloadId, "failed");
           logger.error(
             `Verification failed: could not get metadata for ${downloadId}`,
           );
@@ -127,8 +136,7 @@ class DownloadService {
         }
 
         if (metadata.size !== event.size) {
-          record.status = "failed";
-          record.error = `Size mismatch: expected ${event.size}, got ${metadata.size}`;
+          await dbService.updateDownloadStatus(downloadId, "failed");
           logger.error(`Verification failed: size mismatch for ${downloadId}`, {
             expected: event.size,
             actual: metadata.size,
@@ -136,40 +144,58 @@ class DownloadService {
           return;
         }
 
-        // Mark as verified
-        record.status = "verified";
-        record.updatedAt = new Date().toISOString();
+        await dbService.updateDownloadStatus(downloadId, "verified");
         logger.info(`Download verified successfully: ${downloadId}`);
       } else if (event.event === "upload_failed") {
-        record.status = "failed";
-        record.error = event.reason;
-        record.updatedAt = new Date().toISOString();
+        await dbService.updateDownloadStatus(downloadId, "failed");
         logger.error(`Upload failed for ${downloadId}: ${event.reason}`);
       }
     } catch (error) {
       logger.error(`Error handling upload complete for ${downloadId}:`, error);
-      record.status = "failed";
-      record.error = error instanceof Error ? error.message : "Unknown error";
-      record.updatedAt = new Date().toISOString();
+      try {
+        await dbService.updateDownloadStatus(downloadId, "failed");
+      } catch (e) {
+        /* ignore */
+      }
     }
   }
 
-  getDownloadStatus(downloadId: string): DownloadRecord | null {
-    return this.downloads.get(downloadId) || null;
+  async getDownloadStatus(downloadId: string): Promise<DownloadRecord | null> {
+    const record = await dbService.getDownload(downloadId);
+    if (!record) return null;
+
+    return {
+      downloadId: record.download_id,
+      clientId: record.client_id,
+      objectKey: record.object_key,
+      status: record.status as any,
+      createdAt: record.created_at || "",
+      updatedAt: record.updated_at || "",
+      size: record.size,
+      sha256: record.sha256,
+    };
   }
 
-  getAllDownloads(): DownloadRecord[] {
-    return Array.from(this.downloads.values());
+  async getAllDownloads(clientId: string): Promise<DownloadRecord[]> {
+    const records = await dbService.listDownloads(clientId);
+    return records.map((r) => ({
+      downloadId: r.download_id,
+      clientId: r.client_id,
+      objectKey: r.object_key,
+      status: r.status as any,
+      createdAt: r.created_at || "",
+      updatedAt: r.updated_at || "",
+      size: r.size,
+      sha256: r.sha256,
+    }));
   }
 
-  getClientIds(): string[] {
-    const clientIds = new Set<string>();
-    this.downloads.forEach((record) => clientIds.add(record.clientId));
-    return Array.from(clientIds);
+  async getClientIds(): Promise<string[]> {
+    return [];
   }
 
   async getArtifactUrl(downloadId: string): Promise<string | null> {
-    const record = this.downloads.get(downloadId);
+    const record = await dbService.getDownload(downloadId);
 
     if (!record || record.status !== "verified") {
       return null;
@@ -177,7 +203,9 @@ class DownloadService {
 
     try {
       const url = await storageService.generatePresignedGetUrl(
-        record.objectKey,
+        record.object_key,
+        3600,
+        record.original_filename,
       );
       return url;
     } catch (error) {

@@ -86,13 +86,20 @@ class StorageService {
   async generatePresignedGetUrl(
     objectKey: string,
     expiresIn: number = 3600,
+    originalFilename?: string,
   ): Promise<string> {
     try {
       // Use AWS SDK to generate URL offline suitable for external access (localhost)
-      const command = new GetObjectCommand({
+      const commandInput: any = {
         Bucket: this.bucket,
         Key: objectKey,
-      });
+      };
+
+      if (originalFilename) {
+        commandInput.ResponseContentDisposition = `attachment; filename="${originalFilename}"`;
+      }
+
+      const command = new GetObjectCommand(commandInput);
 
       const url = await getSignedUrl(this.externalS3Client, command, {
         expiresIn,
