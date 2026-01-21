@@ -25,7 +25,7 @@ class DownloadService {
   ): Promise<DownloadRecord> {
     try {
       const downloadId = uuidv4();
-      const objectKey = `silentmode-uploads/${clientId}/${downloadId}.bin`;
+      const objectKey = `${clientId}/${downloadId}.bin`;
       const now = new Date().toISOString();
       const expiresAt = new Date(
         Date.now() + this.presignedExpiresSeconds * 1000,

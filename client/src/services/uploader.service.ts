@@ -82,7 +82,9 @@ class UploaderService {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      logger.error(`Upload failed for ${downloadId}:`, error);
+      logger.error(`Upload failed for ${downloadId}: ${errorMessage}`, {
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       await this.publishFailedEvent(downloadId, objectKey, errorMessage);
     } finally {
       this.activeDownloads.delete(downloadId);
@@ -105,8 +107,8 @@ class UploaderService {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
         logger.warn(
-          `Upload attempt ${attempt} failed for ${downloadId}:`,
-          error,
+          `Upload attempt ${attempt} failed for ${downloadId}: ${lastError.message}`,
+          { stack: lastError.stack },
         );
 
         if (attempt < this.maxRetries) {
@@ -172,7 +174,11 @@ class UploaderService {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      logger.error("Error publishing failed event:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      logger.error(`Error publishing failed event: ${errorMessage}`, {
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 

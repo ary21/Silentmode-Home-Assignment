@@ -116,7 +116,7 @@ Response:
 {
   "ok": true,
   "downloadId": "550e8400-e29b-41d4-a716-446655440000",
-  "objectKey": "silentmode-uploads/client-1/550e8400-e29b-41d4-a716-446655440000.bin",
+  "objectKey": "client-1/550e8400-e29b-41d4-a716-446655440000.bin",
   "expiresAt": "2026-01-21T08:00:00.000Z"
 }
 ```
@@ -135,7 +135,7 @@ Response:
   "downloadId": "550e8400-e29b-41d4-a716-446655440000",
   "clientId": "client-1",
   "status": "verified",
-  "objectKey": "silentmode-uploads/client-1/550e8400-e29b-41d4-a716-446655440000.bin",
+  "objectKey": "client-1/550e8400-e29b-41d4-a716-446655440000.bin",
   "size": 104857600,
   "sha256": "abc123...",
   "createdAt": "2026-01-21T07:45:00.000Z",
@@ -157,7 +157,7 @@ Response:
 ```json
 {
   "downloadId": "550e8400-e29b-41d4-a716-446655440000",
-  "artifactUrl": "http://minio:9000/silentmode-uploads/...",
+  "artifactUrl": "http://localhost:9000/silentmode-uploads/...",
   "expiresIn": 3600
 }
 ```
@@ -216,7 +216,7 @@ Trigger file download from specified client.
 {
   "ok": true,
   "downloadId": "uuid",
-  "objectKey": "silentmode-uploads/client-1/uuid.bin",
+  "objectKey": "client-1/uuid.bin",
   "expiresAt": "ISO8601 timestamp"
 }
 ```
@@ -232,7 +232,7 @@ Get download status and details.
   "downloadId": "uuid",
   "clientId": "client-1",
   "status": "pending|uploaded|verified|failed",
-  "objectKey": "silentmode-uploads/client-1/uuid.bin",
+  "objectKey": "client-1/uuid.bin",
   "size": 104857600,
   "sha256": "hex checksum",
   "createdAt": "ISO8601",
@@ -277,7 +277,7 @@ Published to: `commands:<clientId>`
 {
   "cmd": "upload",
   "downloadId": "uuid",
-  "objectKey": "silentmode-uploads/client-1/uuid.bin",
+  "objectKey": "client-1/uuid.bin",
   "presignedUrl": "https://minio:9000/...",
   "expiresAt": "ISO8601 timestamp",
   "meta": {
@@ -296,7 +296,7 @@ Published to: `events:server`
 {
   "event": "upload_complete",
   "downloadId": "uuid",
-  "objectKey": "silentmode-uploads/client-1/uuid.bin",
+  "objectKey": "client-1/uuid.bin",
   "size": 104857600,
   "sha256": "hex checksum",
   "status": "ok",
@@ -310,7 +310,7 @@ Published to: `events:server`
 {
   "event": "upload_failed",
   "downloadId": "uuid",
-  "objectKey": "silentmode-uploads/client-1/uuid.bin",
+  "objectKey": "client-1/uuid.bin",
   "reason": "error message",
   "timestamp": "ISO8601"
 }
@@ -376,6 +376,7 @@ docker exec <container> /app/scripts/create-test-file.sh
 **Server:**
 
 - `MINIO_ENDPOINT` - MinIO host:port (default: `minio:9000`)
+- `MINIO_EXTERNAL_ENDPOINT` - MinIO external host:port for presigned URLs (default: `localhost:9000`)
 - `MINIO_ACCESS_KEY` - MinIO access key (default: `minioadmin`)
 - `MINIO_SECRET_KEY` - MinIO secret key (default: `minioadmin`)
 - `MINIO_BUCKET` - Bucket name (default: `silentmode-uploads`)
