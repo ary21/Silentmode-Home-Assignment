@@ -51,7 +51,7 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: uploads
+      MINIO_BUCKET: silentmode-uploads
       REDIS_URL: redis://redis:6379
       SERVER_PORT: 8080
       SERVER_API_KEY: ${SERVER_API_KEY:-dev-api-key-change-in-production}

@@ -19,21 +19,21 @@ if (!clientId) {
 
 async function startClient() {
   try {
-    logger.info(`Starting client: ${clientId}`);
+    logger.info(`Starting client: ${clientId!}`);
     logger.info(`File path: ${filePath}`);
 
     // Connect to broker
     await brokerService.connect();
 
     // Subscribe to commands
-    await brokerService.subscribeToCommands(clientId, (command) => {
+    await brokerService.subscribeToCommands(clientId!, (command) => {
       logger.info(`Received command: ${command.cmd}`, {
         downloadId: command.downloadId,
       });
       uploaderService.handleUploadCommand(command, filePath);
     });
 
-    logger.info(`Client ${clientId} is ready and listening for commands`);
+    logger.info(`Client ${clientId!} is ready and listening for commands`);
   } catch (error) {
     logger.error("Failed to start client:", error);
     process.exit(1);

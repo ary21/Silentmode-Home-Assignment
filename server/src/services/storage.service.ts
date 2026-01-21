@@ -18,7 +18,7 @@ class StorageService {
       secretKey: process.env.MINIO_SECRET_KEY || "minioadmin",
     });
 
-    this.bucket = process.env.MINIO_BUCKET || "uploads";
+    this.bucket = process.env.MINIO_BUCKET || "silentmode-uploads";
     logger.info(
       `StorageService initialized with endpoint: ${endpoint}, bucket: ${this.bucket}`,
     );
