@@ -1,9 +1,11 @@
 import { Client } from "minio";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import logger from "../utils/logger";
 
 class StorageService {
   private client: Client;
-  private externalClient: Client;
+  private externalS3Client: S3Client;
   private bucket: string;
   private externalEndpoint: string;
 
@@ -12,7 +14,7 @@ class StorageService {
     const [host, portStr] = endpoint.split(":");
     const port = parseInt(portStr || "9000", 10);
 
-    // Internal client for server-to-MinIO operations
+    // Internal client for server-to-MinIO operations (keep using MinIO lib)
     this.client = new Client({
       endPoint: host,
       port: port,
@@ -22,17 +24,18 @@ class StorageService {
     });
 
     // External client for generating presigned URLs accessible from host
+    // We use AWS SDK because it supports offline signing (doesn't try to connect to localhost from inside docker)
     this.externalEndpoint =
       process.env.MINIO_EXTERNAL_ENDPOINT || "localhost:9000";
-    const [externalHost, externalPortStr] = this.externalEndpoint.split(":");
-    const externalPort = parseInt(externalPortStr || "9000", 10);
 
-    this.externalClient = new Client({
-      endPoint: externalHost,
-      port: externalPort,
-      useSSL: process.env.MINIO_USE_SSL === "true",
-      accessKey: process.env.MINIO_ACCESS_KEY || "minioadmin",
-      secretKey: process.env.MINIO_SECRET_KEY || "minioadmin",
+    this.externalS3Client = new S3Client({
+      endpoint: `http://${this.externalEndpoint}`, // AWS SDK needs protocol
+      region: "us-east-1", // MinIO default
+      credentials: {
+        accessKeyId: process.env.MINIO_ACCESS_KEY || "minioadmin",
+        secretAccessKey: process.env.MINIO_SECRET_KEY || "minioadmin",
+      },
+      forcePathStyle: true, // Required for MinIO
     });
 
     this.bucket = process.env.MINIO_BUCKET || "silentmode-uploads";
@@ -46,12 +49,12 @@ class StorageService {
       const exists = await this.client.bucketExists(this.bucket);
       if (!exists) {
         await this.client.makeBucket(this.bucket, "us-east-1");
-        logger.info(`Created bucket: ${this.bucket}`);
+        logger.info(`Bucket created: ${this.bucket}`);
       } else {
         logger.info(`Bucket already exists: ${this.bucket}`);
       }
     } catch (error) {
-      logger.error("Error ensuring bucket exists:", error);
+      logger.error(`Error ensuring bucket ${this.bucket}:`, error);
       throw error;
     }
   }
@@ -85,12 +88,16 @@ class StorageService {
     expiresIn: number = 3600,
   ): Promise<string> {
     try {
-      // Use external client to generate URL with correct signature for external access
-      const url = await this.externalClient.presignedGetObject(
-        this.bucket,
-        objectKey,
+      // Use AWS SDK to generate URL offline suitable for external access (localhost)
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+      });
+
+      const url = await getSignedUrl(this.externalS3Client, command, {
         expiresIn,
-      );
+      });
+
       logger.debug(
         `Generated presigned GET URL for ${objectKey}, expires in ${expiresIn}s`,
       );
@@ -107,11 +114,9 @@ class StorageService {
   async verifyObjectExists(objectKey: string): Promise<boolean> {
     try {
       await this.client.statObject(this.bucket, objectKey);
-      logger.debug(`Object verified: ${objectKey}`);
       return true;
     } catch (error: any) {
       if (error.code === "NotFound") {
-        logger.debug(`Object not found: ${objectKey}`);
         return false;
       }
       logger.error(`Error verifying object ${objectKey}:`, error);

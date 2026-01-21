@@ -123,9 +123,9 @@ success "Artifact URL obtained"
 
 # Verify we can access the artifact
 info "Verifying artifact accessibility..."
-curl -s -I "$ARTIFACT_URL" | head -n 1 | grep "200" > /dev/null
-if [ $? -ne 0 ]; then
-  error "Artifact is not accessible"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$ARTIFACT_URL")
+if [ "$HTTP_CODE" != "200" ]; then
+  error "Artifact is not accessible (HTTP $HTTP_CODE)"
 fi
 
 success "Artifact is accessible"

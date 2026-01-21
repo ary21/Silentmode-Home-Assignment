@@ -168,6 +168,12 @@ Use the `artifactUrl` to download the file:
 curl -o myfile.bin "<artifactUrl>"
 ```
 
+### check hash
+
+```bash
+sha256sum myfile.bin
+```
+
 ## API Reference
 
 ### Authentication
